@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "coolkit chart values",
+  "type": "object",
+  "required": ["image", "keda", "cloudsql"],
+  "properties": {
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": {
+          "type": "string",
+          "description": "Immutable image SHA/tag. Must be non-empty — floating tags like 'latest' are disallowed.",
+          "minLength": 1
+        },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "replicaCount": { "type": "integer", "minimum": 1 },
+    "ports": {
+      "type": "object",
+      "properties": {
+        "http": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "metrics": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "cache": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "peerDiscovery": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["dns", "k8s-api"] },
+        "publishNotReadyAddresses": { "type": "boolean" }
+      }
+    },
+    "keda": {
+      "type": "object",
+      "required": ["minReplicas", "maxReplicas", "scaler"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minReplicas": { "type": "integer", "minimum": 1 },
+        "maxReplicas": { "type": "integer", "minimum": 1 },
+        "pollingInterval": { "type": "integer", "minimum": 1 },
+        "scaler": {
+          "type": "object",
+          "required": ["url", "targetValue", "valueLocation"],
+          "properties": {
+            "url": { "type": "string", "minLength": 1 },
+            "targetValue": { "type": "string", "minLength": 1 },
+            "valueLocation": { "type": "string", "minLength": 1 },
+            "format": { "type": "string", "enum": ["json", "prometheus", "xml", "yaml"] },
+            "method": { "type": "string" }
+          }
+        }
+      }
+    },
+    "cloudsql": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "host": { "type": "string" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "dbname": { "type": "string" },
+        "existingSecret": { "type": "string" },
+        "createSecret": { "type": "boolean" }
+      }
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "maxUnavailable": { "type": ["integer", "string"] }
+      }
+    }
+  }
+}

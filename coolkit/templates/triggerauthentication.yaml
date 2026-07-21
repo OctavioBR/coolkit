@@ -1,0 +1,40 @@
+{{- if and .Values.keda.enabled .Values.keda.auth.enabled -}}
+{{- $secret := required "keda.auth.secretName is required when keda.auth.enabled=true" .Values.keda.auth.secretName -}}
+{{- /*
+  Optional auth for the KEDA metrics-api scaler call. The referenced Secret is created
+  out-of-band; this template only wires the reference. Key names map to the scaler's authMode:
+    bearer -> token   |   basic -> username,password   |   tls -> ca,cert,key
+*/ -}}
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: {{ include "coolkit.fullname" . }}
+  labels:
+    {{- include "coolkit.labels" . | nindent 4 }}
+spec:
+  secretTargetRef:
+    {{- if eq .Values.keda.auth.mode "bearer" }}
+    - parameter: token
+      name: {{ $secret }}
+      key: token
+    {{- else if eq .Values.keda.auth.mode "basic" }}
+    - parameter: username
+      name: {{ $secret }}
+      key: username
+    - parameter: password
+      name: {{ $secret }}
+      key: password
+    {{- else if eq .Values.keda.auth.mode "tls" }}
+    - parameter: ca
+      name: {{ $secret }}
+      key: ca
+    - parameter: cert
+      name: {{ $secret }}
+      key: cert
+    - parameter: key
+      name: {{ $secret }}
+      key: key
+    {{- else }}
+    {{- fail (printf "unsupported keda.auth.mode %q (expected bearer|basic|tls)" .Values.keda.auth.mode) }}
+    {{- end }}
+{{- end }}

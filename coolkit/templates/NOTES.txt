@@ -1,0 +1,36 @@
+coolkit {{ .Chart.AppVersion }} deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Image:      {{ include "coolkit.image" . }}
+API:        http://{{ include "coolkit.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.ports.http }}   (ClusterIP, internal)
+Observe:    :{{ .Values.ports.metrics }}{{ .Values.probes.path }} (health) and :{{ .Values.ports.metrics }}/metrics (Prometheus)
+Cache peers: {{ include "coolkit.headlessName" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.ports.cache }} (headless, {{ .Values.peerDiscovery.mode }} discovery)
+
+{{ if .Values.keda.enabled -}}
+Autoscaling (KEDA): {{ .Values.keda.minReplicas }}..{{ .Values.keda.maxReplicas }} replicas from {{ .Values.keda.scaler.url }}
+  Watch it:   kubectl get scaledobject,hpa -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+  KEDA owns replica count via hpa/keda-hpa-{{ include "coolkit.fullname" . }}; the Deployment intentionally sets no replicas.
+{{- else -}}
+Autoscaling: KEDA DISABLED — running a fixed {{ .Values.replicaCount }} replicas.
+{{- end }}
+
+Quick checks:
+  kubectl rollout status deploy/{{ include "coolkit.fullname" . }} -n {{ .Release.Namespace }}
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }} -o wide
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+{{ if .Values.metrics.serviceMonitor.enabled -}}
+{{- if not (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+WARNING: metrics.serviceMonitor.enabled=true but the Prometheus Operator CRD is NOT present on
+this cluster, so the ServiceMonitor was SKIPPED. Install kube-prometheus-stack, or switch to
+metrics.annotations.enabled=true for annotation-based scraping.
+{{- else }}
+ServiceMonitor is active. Ensure its selector label matches your Prometheus serviceMonitorSelector
+(currently: {{ .Values.metrics.serviceMonitor.additionalLabels | toJson }}).
+{{- end }}
+{{- end }}
+
+{{- if and .Values.cloudsql.enabled (not .Values.cloudsql.existingSecret) (not .Values.cloudsql.createSecret) }}
+
+WARNING: cloudsql.enabled=true but neither existingSecret nor createSecret is set — DB_USER/
+DB_PASSWORD will be missing and pods will fail to connect. Provide cloudsql.existingSecret.
+{{- end }}

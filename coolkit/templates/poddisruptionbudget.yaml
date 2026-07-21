@@ -1,0 +1,18 @@
+{{- if .Values.podDisruptionBudget.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "coolkit.fullname" . }}
+  labels:
+    {{- include "coolkit.labels" . | nindent 4 }}
+spec:
+  # Fixed maxUnavailable (not a percentage): bounds voluntary disruption to a single cache
+  # member regardless of fleet size (10..100). A percentage would permit MORE simultaneous
+  # evictions exactly when the fleet is largest — the opposite of what a cache wants.
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  # Don't let already-broken pods block a node drain waiting on a budget they can't help.
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      {{- include "coolkit.selectorLabels" . | nindent 6 }}
+{{- end }}

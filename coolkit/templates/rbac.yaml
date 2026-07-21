@@ -1,0 +1,31 @@
+{{- if eq .Values.peerDiscovery.mode "k8s-api" -}}
+{{- /*
+  Only rendered when peerDiscovery.mode=k8s-api: the app queries the API server for peer pods
+  directly instead of relying on DNS. Namespace-scoped and read-only on pods.
+*/ -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "coolkit.fullname" . }}-peer-discovery
+  labels:
+    {{- include "coolkit.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "coolkit.fullname" . }}-peer-discovery
+  labels:
+    {{- include "coolkit.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "coolkit.fullname" . }}-peer-discovery
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "coolkit.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

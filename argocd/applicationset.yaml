@@ -1,0 +1,73 @@
+# ArgoCD ApplicationSet: fan the coolkit chart out to every registered prod cluster.
+#
+# - `clusters` generator: one Application per cluster labeled env=prod (labels are set when the
+#   cluster is registered with ArgoCD).
+# - Multi-source: the chart is rendered with a per-region values overlay pulled from this same
+#   repo via the `$values` ref, so region files can live under argocd/values/ (outside the chart).
+# - RollingSync: a canary region syncs and bakes before the rest — a bad image SHA never lands
+#   everywhere at once. Promote a SHA by editing the region's values file; canary first.
+#
+# Prereqs on each target cluster (installed by a PRIOR platform-bootstrap wave, not here):
+#   KEDA operator, Prometheus Operator CRDs. See docs/SCALING.md.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: coolkit
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  # Roll out region-by-region. Steps match on the generated Application's `wave` label, which
+  # we copy from the cluster's `wave` label below.
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["canary"]
+          maxUpdate: 1
+        - matchExpressions:
+            - key: wave
+              operator: In
+              values: ["rest"]
+
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            env: prod
+
+  template:
+    metadata:
+      name: coolkit-{{.metadata.labels.region}}
+      labels:
+        # Consumed by the RollingSync steps above. Cluster must be labeled wave=canary|rest.
+        wave: "{{.metadata.labels.wave}}"
+        region: "{{.metadata.labels.region}}"
+    spec:
+      project: default
+      sources:
+        # Ref-only source: exposes this repo as $values for the valueFiles path below.
+        - repoURL: https://github.com/octaviobr/coolkit.git
+          targetRevision: main
+          ref: values
+        # The chart itself.
+        - repoURL: https://github.com/octaviobr/coolkit.git
+          targetRevision: main
+          path: coolkit
+          helm:
+            valueFiles:
+              - $values/argocd/values/{{.metadata.labels.region}}.yaml
+      destination:
+        server: "{{.server}}"
+        namespace: production
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ApplyOutOfSyncOnly=true

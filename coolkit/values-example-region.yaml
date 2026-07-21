@@ -1,0 +1,28 @@
+# Example per-region override, layered on top of values.yaml by ArgoCD.
+# Copy this to argocd/values/<region>.yaml and adjust. Only the values that legitimately
+# differ per region belong here — everything else inherits the chart defaults.
+
+# Immutable image SHA promoted to this region. In practice ArgoCD/CI sets this.
+image:
+  tag: "0000000000000000000000000000000000000000"
+
+# The cache library's real inter-pod port (placeholder in defaults).
+ports:
+  cache: 7000
+
+# Cloud SQL is regional: point at this region's instance private IP + its credentials Secret.
+cloudsql:
+  host: "10.20.0.5"
+  existingSecret: coolkit-db
+
+# The scaler is cluster-local, so this URL is normally identical everywhere and needs NO
+# override. Shown here only to make the per-region contract explicit.
+keda:
+  scaler:
+    url: http://scaler.production.svc.cluster.local/estimate/coolkit
+
+# Match the Prometheus release that runs in this cluster.
+metrics:
+  serviceMonitor:
+    additionalLabels:
+      release: kube-prometheus-stack

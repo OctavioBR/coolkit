@@ -1,0 +1,24 @@
+# Per-region overlay for the us-central1 cluster (canary wave).
+# Layered on top of coolkit/values.yaml by the ArgoCD ApplicationSet.
+# CI/promotion edits image.tag HERE FIRST — RollingSync syncs this canary region before the rest.
+
+image:
+  # Immutable image SHA promoted to this region.
+  tag: "0000000000000000000000000000000000000000"
+
+ports:
+  # The cache library's real inter-pod port (chart default 7000 is a placeholder).
+  cache: 7000
+
+cloudsql:
+  # Regional Cloud SQL instance private IP + region-local credentials Secret.
+  host: "10.20.0.5"
+  existingSecret: coolkit-db
+
+metrics:
+  serviceMonitor:
+    additionalLabels:
+      # Must match this cluster's Prometheus serviceMonitorSelector.
+      release: kube-prometheus-stack
+
+# keda.scaler.url is intentionally NOT overridden — it's a cluster-local name, identical everywhere.

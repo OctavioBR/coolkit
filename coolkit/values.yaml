@@ -1,0 +1,193 @@
+# Default values for coolkit.
+# This is a YAML-formatted file. Every value here is documented; per-environment overrides
+# live in values-<region>.yaml files layered on top by ArgoCD (see argocd/).
+
+# -- Container image. `tag` is REQUIRED and must be an immutable SHA (never "latest").
+# Enforced by the `coolkit.image` helper, which calls `required` on the tag.
+image:
+  repository: gcr.io/example/coolkit
+  tag: "" # e.g. "1a2b3c4d..." — set per deploy via --set image.tag=<sha>
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# -- Extra name overrides.
+nameOverride: ""
+fullnameOverride: ""
+
+# -- Initial replica count. ONLY consulted when keda.enabled=false (e.g. local/dev). When
+# KEDA is enabled the Deployment omits spec.replicas entirely so KEDA/HPA owns the count and
+# `helm upgrade` / ArgoCD syncs never stamp a static value back over a scaled fleet.
+replicaCount: 10
+
+# -- Resource requests/limits. Defaults to Guaranteed QoS (requests == limits) for
+# predictable scheduling on a shared cluster. Drop the CPU limit only if you observe CFS
+# throttling (container_cpu_cfs_throttled_periods_total).
+resources:
+  requests:
+    cpu: "2"
+    memory: 4Gi
+  limits:
+    cpu: "2"
+    memory: 4Gi
+
+# -- Ports. `cache` is the inter-pod gossip/replication port for the distributed cache.
+# NOTE: 7000 is a PLACEHOLDER — set it to the cache library's real port before shipping.
+ports:
+  http: 8080
+  metrics: 2345
+  cache: 7000
+
+# -- Peer discovery for the distributed in-memory cache.
+#   dns     : app resolves the headless Service to get all peer pod IPs (no RBAC needed).
+#   k8s-api : app queries the API server for peers directly (adds a namespaced Role; more
+#             robust than DNS under rapid scaling — no resolver TTL lag).
+peerDiscovery:
+  mode: dns
+  # publishNotReadyAddresses lets a cold-start fleet (no pod Ready yet) discover peers so it
+  # doesn't deadlock. Leave on unless the cache library specifically wants Ready-only peers.
+  publishNotReadyAddresses: true
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  # Workload Identity (the future-improvement path in docs/IMPROVEMENTS.md) would add:
+  #   iam.gke.io/gcp-service-account: coolkit@<project>.iam.gserviceaccount.com
+
+# -- API + metrics Service (ClusterIP; internal only).
+service:
+  type: ClusterIP
+  annotations: {}
+
+# -- Cloud SQL connectivity (kept simple): the app connects DIRECTLY to the instance's
+# private IP using credentials from a Kubernetes Secret. See docs/IMPROVEMENTS.md for the
+# Auth Proxy sidecar + Workload Identity hardening path.
+cloudsql:
+  enabled: true
+  host: "" # Cloud SQL private IP or DNS reachable from the cluster VPC
+  port: 5432
+  dbname: coolkit
+  # RECOMMENDED: reference a Secret created out-of-band so credentials never touch git/values.
+  # It must contain keys: DB_USER, DB_PASSWORD.
+  existingSecret: ""
+  # DEV-ONLY convenience: let the chart create the Secret from the values below. Never set
+  # createSecret=true with real credentials in a committed values file.
+  createSecret: false
+  username: ""
+  password: ""
+
+# -- KEDA autoscaling via the metrics-api scaler. KEDA creates and owns its own HPA
+# (keda-hpa-coolkit); the chart ships NO hpa.yaml to avoid two controllers fighting.
+keda:
+  enabled: true
+  minReplicas: 10
+  maxReplicas: 100
+  pollingInterval: 30 # seconds between scaler polls
+  cooldownPeriod: 300 # only relevant for scale-to-0, which we never do (min=10)
+  scaler:
+    url: http://scaler.production.svc.cluster.local/estimate/coolkit
+    # The endpoint returns a desired instance count. With targetValue "1",
+    # desiredReplicas = ceil(estimate / 1) = estimate, clamped to [min,max].
+    targetValue: "1"
+    # Where the count lives in the response body (GJSON path for json, dotted for prometheus).
+    valueLocation: "estimate"
+    format: json # json | prometheus | xml | yaml
+    method: GET
+  # Optional auth to the scaler endpoint. When enabled, provide a TriggerAuthentication-backed
+  # Secret out-of-band and set authSecretName; the chart wires the reference only.
+  auth:
+    enabled: false
+    # mode: bearer | basic | tls
+    mode: bearer
+    secretName: ""
+  # Asymmetric HPA behavior: adding a cache node is cheap; removing several at once causes
+  # rebalancing storms. So scale up fast, scale down slow and capped.
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      selectPolicy: Max
+      policies:
+        - type: Pods
+          value: 10
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      selectPolicy: Min
+      policies:
+        - type: Pods
+          value: 5
+          periodSeconds: 300
+  # If the scaler endpoint is unreachable failureThreshold times, hold at a safe mid-count.
+  fallback:
+    failureThreshold: 3
+    replicas: 20
+
+# -- PodDisruptionBudget. Fixed maxUnavailable: 1 (NOT a percentage): a percentage permits
+# more simultaneous evictions exactly when the fleet is largest, which is the opposite of
+# what a distributed cache wants. A fixed 1 bounds voluntary churn to one member at any size.
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+# -- Graceful shutdown. preStop sleep lets endpoint removal propagate before the app drains
+# (avoids the "traffic arrives after shutdown started" race). Raise the grace period if the
+# cache library's partition hand-off needs longer.
+terminationGracePeriodSeconds: 90
+preStopSleepSeconds: 5
+
+# -- Health probes, all on the observability port (/healthz:2345). A single endpoint is
+# provided, so liveness and readiness reuse it (see docs/IMPROVEMENTS.md re: split /readyz).
+probes:
+  path: /healthz
+  startup:
+    periodSeconds: 10
+    failureThreshold: 30 # up to ~5 min for warm-up + joining the cache mesh
+    timeoutSeconds: 3
+  liveness:
+    periodSeconds: 10
+    failureThreshold: 5 # lenient — only fire on true deadlock
+    timeoutSeconds: 3
+  readiness:
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 3
+
+# -- Prometheus scraping. Ship both mechanisms; enable per environment.
+metrics:
+  # ServiceMonitor (Prometheus Operator). Also guarded on CRD presence via .Capabilities.
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    # REQUIRED for kube-prometheus-stack to actually select this monitor. Match your
+    # Prometheus release's serviceMonitorSelector (commonly the release name).
+    additionalLabels:
+      release: kube-prometheus-stack
+  # Old-style pod annotations, for clusters without the Operator.
+  annotations:
+    enabled: false
+
+# -- NetworkPolicy to restrict ingress to known consumers + Prometheus. Off by default;
+# enable and populate on shared clusters.
+networkPolicy:
+  enabled: false
+  # Namespaces/pods allowed to reach the API (8080). Empty allows all when enabled=true.
+  allowedNamespaces: []
+
+# -- Rolling update: surge new pods (which join the cache mesh) before removing old ones.
+updateStrategy:
+  maxSurge: 25%
+  maxUnavailable: 0
+
+# -- Scheduling. Soft pod anti-affinity spreads cache pods across nodes/zones by default.
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+# -- Extra env vars / annotations / labels passthrough.
+extraEnv: []
+podAnnotations: {}
+podLabels: {}

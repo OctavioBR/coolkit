@@ -1,0 +1,38 @@
+{{- if .Values.networkPolicy.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "coolkit.fullname" . }}
+  labels:
+    {{- include "coolkit.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "coolkit.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Peer-to-peer cache traffic between coolkit pods (the distributed in-memory cache).
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "coolkit.selectorLabels" . | nindent 14 }}
+      ports:
+        - port: cache
+          protocol: TCP
+    # API traffic from allowed consumers. Empty allowedNamespaces => allow from anywhere.
+    - from:
+        {{- range .Values.networkPolicy.allowedNamespaces }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
+      ports:
+        - port: http
+          protocol: TCP
+    # Metrics scraping (Prometheus) — left open to the cluster; tighten to the monitoring ns
+    # by adding it to allowedNamespaces semantics if desired.
+    - ports:
+        - port: metrics
+          protocol: TCP
+{{- end }}

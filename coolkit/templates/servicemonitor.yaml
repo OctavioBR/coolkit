@@ -1,0 +1,32 @@
+{{- /*
+  Rendered only when metrics.serviceMonitor.enabled AND the Prometheus Operator CRD is
+  present. The Capabilities guard means installing on a cluster without the Operator does
+  NOT hard-fail — the ServiceMonitor is simply skipped (see NOTES.txt). The additionalLabels
+  MUST match the Prometheus release's serviceMonitorSelector or Prometheus silently never
+  scrapes this — a common footgun.
+
+  For `helm template`/lint without a live cluster, add: -a monitoring.coreos.com/v1
+*/ -}}
+{{- if and .Values.metrics.serviceMonitor.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "coolkit.fullname" . }}
+  labels:
+    {{- include "coolkit.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "coolkit.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      path: {{ .Values.metrics.serviceMonitor.path }}
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+{{- end }}

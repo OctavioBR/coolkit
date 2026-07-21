@@ -1,0 +1,22 @@
+{{- /*
+  Headless Service for distributed-cache peer discovery. clusterIP: None makes a DNS lookup
+  of this name return one A record per pod IP, which the cache library resolves to build its
+  peer list. publishNotReadyAddresses lets a cold-start fleet (no pod Ready yet) find peers so
+  it doesn't deadlock during initial cluster formation.
+*/ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "coolkit.headlessName" . }}
+  labels:
+    {{- include "coolkit.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: {{ .Values.peerDiscovery.publishNotReadyAddresses }}
+  selector:
+    {{- include "coolkit.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: cache
+      port: {{ .Values.ports.cache }}
+      targetPort: cache
+      protocol: TCP
