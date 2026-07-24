@@ -58,3 +58,5 @@ make docker-build
 ```
 
 > **Multi-cluster scaling:** [MULTI-CLUSTER](docs/MULTI-CLUSTER.md)
+
+> 🤖 Disclaimer: Claude code (Opus 4.8) assisted me in generating most of this repo. Though every single line of code has been carefully reviewed by me.
