@@ -8,8 +8,7 @@ Helm chart to deploy **coolkit** — a sample HTTP API service to be scaled on K
 
 ## Try on local ([k3d](https://k3d.io/)) cluster
 ```sh
-make k3d-up      # creates a local cluster and installs ArgoCD
-make argocd-app  # applies an app-of-apps that enable Keda, Prometheus and Coolkit (helm templated) release
+make k3d-up  # creates a local cluster, installs ArgoCD on it, then the full app stack (Keda, Prometheus and Coolkit)
 ```
 Everything below ArgoCD is GitOps-managed — `argocd-register` applies one [root Application](argocd/root.yaml)
 that syncs the tree under [argocd/apps/](argocd/apps/) in sync-wave order:
@@ -47,10 +46,10 @@ kubectl port-forward svc/prometheus-grafana 3000:80
 kubectl get secret prometheus-grafana -o jsonpath='{.data.admin-password}' | base64 -d;
 ```
 
-**Helm chart** mainly renders the following manifests:
-`Deployment` · `Service` (API) · `ScaledObject` (KEDA) · `ServiceMonitor` (prom metrics).
-The k3d overlay also renders a Traefik `Ingress` via `additionalManifests`.
-DB connection values could be loaded assuming a pre-existing kubernetes secret, set by `cloudsql.existingSecret`.
+**Helm chart** mainly renders the following manifests:<br>
+`Deployment` · `Service` (API) · `ScaledObject` (KEDA) · `ServiceMonitor` (prom metrics).<br>
+The k3d overlay also renders a Traefik `Ingress` via `additionalManifests`.<br>
+DB connection values could be loaded assuming a pre-existing kubernetes secret, set by `cloudsql.existingSecret`.<br>
 
 ## Building a sample container image (src)
 There's Go HTTP server that implements a getter/setter "estimate" value (integer) on `:8080/estimate/coolkit`, which also print's it's hostname. Also `/healthz` and `/metrics` on `2345` port for observability and operations.
