@@ -31,11 +31,6 @@ docker-stop: ## Stop and remove local container
 	docker rm coolkit
 
 k3d-up: ## Create local k3d cluster, install coolkit as ArgoCD app-of-apps with all its dependencies
-	if [ -z "$${GITHUB_TOKEN:-}" ]; then
-		echo "GITHUB_TOKEN must be exported (read:packages scope) for the ghcr-pull secret" >&2
-		exit 1
-	fi
-
 	if ! k3d cluster list "$(K3D_CLUSTER)" >/dev/null 2>&1; then
 		k3d cluster create "$(K3D_CLUSTER)" --agents 3 --port "8081:80@loadbalancer"
 	fi
@@ -46,14 +41,6 @@ k3d-up: ## Create local k3d cluster, install coolkit as ArgoCD app-of-apps with 
 		--namespace argocd --create-namespace \
 		--version "$(ARGOCD_CHART)" \
 		-f argocd/values/argocd-k3d.yaml --wait
-
-	kubectl create namespace production --dry-run=client -o yaml | kubectl apply -f -
-	kubectl create secret docker-registry ghcr-pull \
-		--namespace production \
-		--docker-server=ghcr.io \
-		--docker-username=octaviobr \
-		--docker-password="$$GITHUB_TOKEN" \
-		--dry-run=client -o yaml | kubectl apply -f -
 
 	kubectl apply -f argocd/root.yaml
 
