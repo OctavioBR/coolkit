@@ -1,0 +1,104 @@
+image:
+  repository: gcr.io/example/coolkit
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1 # Only used when keda.enabled=false
+
+resources:
+  requests:
+    cpu: "2"
+    memory: 4Gi
+  limits:
+    cpu: "2"
+    memory: 4Gi
+
+ports:
+  http: 8080
+  metrics: 2345
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+service:
+  type: ClusterIP
+  annotations: {}
+
+cloudsql:
+  enabled: false
+  existingSecret: coolkit-db # Assuming a secret provides the DB connection and credentials.
+
+keda:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 100
+  pollingInterval: null
+  cooldownPeriod: null
+  scaler:
+    url: http://scaler.production.svc.cluster.local/estimate/coolkit
+    targetValue: "1"
+    format: json
+    valueLocation: "estimate"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 10
+      selectPolicy: Max
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 10
+      selectPolicy: Min
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 15
+  fallback:
+    replicas: 1
+    failureThreshold: 3
+
+probes:
+  path: /healthz
+  startup:
+    periodSeconds: 10
+    failureThreshold: 30
+    timeoutSeconds: 3
+  liveness:
+    periodSeconds: 10
+    failureThreshold: 5
+    timeoutSeconds: 3
+  readiness:
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 3
+
+metrics:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    additionalLabels:
+      release: kube-prometheus-stack # Match kube-prometheus-stack serviceMonitorSelector
+  annotations:
+    enabled: false # Old-style pod scraping annotations
+
+updateStrategy:
+  maxSurge: 25%
+  maxUnavailable: 0
+
+nodeSelector: {}
+tolerations: []
+
+extraEnv: []
+podAnnotations: {}
+podLabels: {}
+additionalManifests: []

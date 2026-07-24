@@ -13,12 +13,11 @@ spec:
   selector:
     {{- include "coolkit.selectorLabels" . | nindent 4 }}
   ports:
-    - name: http
-      port: {{ .Values.ports.http }}
-      targetPort: http
-      protocol: TCP
-    # Metrics ride on the same Service; the ServiceMonitor/annotations target this named port.
-    - name: metrics
-      port: {{ .Values.ports.metrics }}
-      targetPort: metrics
-      protocol: TCP
+  - name: http
+    port: {{ .Values.ports.http }}
+    targetPort: http
+    protocol: TCP
+  - name: metrics
+    port: {{ .Values.ports.metrics }}
+    targetPort: metrics
+    protocol: TCP

@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: coolkit
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  sources:
+  - repoURL: https://github.com/octaviobr/coolkit.git
+    targetRevision: main
+    ref: values
+  - repoURL: https://github.com/octaviobr/coolkit.git
+    targetRevision: main
+    path: helm
+    helm:
+      valueFiles:
+      - $values/argocd/values/coolkit-k3d-alpha.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    - ApplyOutOfSyncOnly=true

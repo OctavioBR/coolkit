@@ -1,0 +1,14 @@
+configs:
+  params:
+    server.insecure: true
+  secret:
+    argocdServerAdminPassword: "$2b$10$c9bIgImjSBHOYW1.KLFFxOhRox4BDz0kdnafWKBZ/tzxD5XEXeXUi"
+    argocdServerAdminPasswordMtime: "2024-01-01T00:00:00Z" # initial login is "admin" / "coolkit".
+
+server:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hostname: argocd.localhost
+    path: /
+    pathType: Prefix
